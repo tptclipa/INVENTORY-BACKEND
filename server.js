@@ -35,10 +35,6 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Serve static files from React build
-// Note: Build React first with: cd frontend-react && npm run build
-app.use(express.static(path.join(__dirname, '../frontend-react/dist')));
-
 // Mount routers
 app.use('/api/auth', auth);
 app.use('/api/categories', categories);
@@ -49,9 +45,30 @@ app.use('/api/documents', documents);
 app.use('/api/excel', excel);
 app.use('/api/ris', ris);
 
-// Catch-all route for React Router - must be after API routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend-react/dist/index.html'));
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Inventory Management API',
+    version: '1.0.0'
+  });
+});
+
+app.get('/api', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'API is running',
+    endpoints: [
+      '/api/auth',
+      '/api/categories',
+      '/api/items',
+      '/api/transactions',
+      '/api/requests',
+      '/api/documents',
+      '/api/excel',
+      '/api/ris'
+    ]
+  });
 });
 
 // Error handler
@@ -63,15 +80,20 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  const server = app.listen(PORT, () => {
+    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+  });
 
-const server = app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-});
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (err, promise) => {
+    console.log(`Error: ${err.message}`);
+    // Close server & exit process
+    server.close(() => process.exit(1));
+  });
+}
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err, promise) => {
-  console.log(`Error: ${err.message}`);
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
+// Export for Vercel serverless
+module.exports = app;

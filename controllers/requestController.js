@@ -23,8 +23,8 @@ exports.getRequests = async (req, res) => {
     const requests = await Request.find(query)
       .populate('item', 'name sku quantity')
       .populate('items.item', 'name sku quantity')
-      .populate('requestedBy', 'username email')
-      .populate('reviewedBy', 'username')
+      .populate('requestedBy', 'name username email')
+      .populate('reviewedBy', 'name username')
       .sort('-createdAt');
 
     res.status(200).json({
@@ -48,8 +48,8 @@ exports.getRequest = async (req, res) => {
     const request = await Request.findById(req.params.id)
       .populate('item', 'name sku quantity')
       .populate('items.item', 'name sku quantity')
-      .populate('requestedBy', 'username email')
-      .populate('reviewedBy', 'username');
+      .populate('requestedBy', 'name username email')
+      .populate('reviewedBy', 'name username');
 
     if (!request) {
       return res.status(404).json({
@@ -122,7 +122,7 @@ exports.createRequest = async (req, res) => {
 
       const populatedRequest = await Request.findById(request._id)
         .populate('items.item', 'name sku quantity unit')
-        .populate('requestedBy', 'username email');
+        .populate('requestedBy', 'name username email');
 
       res.status(201).json({
         success: true,
@@ -164,7 +164,7 @@ exports.createRequest = async (req, res) => {
 
       const populatedRequest = await Request.findById(request._id)
         .populate('item', 'name sku quantity')
-        .populate('requestedBy', 'username email');
+        .populate('requestedBy', 'name username email');
 
       res.status(201).json({
         success: true,
@@ -230,7 +230,7 @@ exports.updateRequest = async (req, res) => {
 
     const updatedRequest = await Request.findById(request._id)
       .populate('item', 'name sku quantity')
-      .populate('requestedBy', 'username email');
+      .populate('requestedBy', 'name username email');
 
     res.status(200).json({
       success: true,
@@ -297,8 +297,8 @@ exports.approveRequest = async (req, res) => {
 
     const updatedRequest = await Request.findById(request._id)
       .populate('item', 'name sku quantity')
-      .populate('requestedBy', 'username email')
-      .populate('reviewedBy', 'username');
+      .populate('requestedBy', 'name username email')
+      .populate('reviewedBy', 'name username');
 
     res.status(200).json({
       success: true,
@@ -350,8 +350,8 @@ exports.rejectRequest = async (req, res) => {
 
     const updatedRequest = await Request.findById(request._id)
       .populate('item', 'name sku quantity')
-      .populate('requestedBy', 'username email')
-      .populate('reviewedBy', 'username');
+      .populate('requestedBy', 'name username email')
+      .populate('reviewedBy', 'name username');
 
     res.status(200).json({
       success: true,
@@ -449,7 +449,7 @@ exports.approveRequestItem = async (req, res) => {
 
     const updatedRequest = await Request.findById(request._id)
       .populate('items.item', 'name sku quantity')
-      .populate('requestedBy', 'username email');
+      .populate('requestedBy', 'name username email');
 
     res.status(200).json({
       success: true,
@@ -516,7 +516,7 @@ exports.rejectRequestItem = async (req, res) => {
 
     const updatedRequest = await Request.findById(request._id)
       .populate('items.item', 'name sku quantity')
-      .populate('requestedBy', 'username email');
+      .populate('requestedBy', 'name username email');
 
     res.status(200).json({
       success: true,

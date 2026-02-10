@@ -83,7 +83,7 @@ exports.getRequest = async (req, res) => {
 // @access  Private
 exports.createRequest = async (req, res) => {
   try {
-    const { item, quantity, unit, items, purpose, notes, requestedByName, requestedByDesignation, receivedByName, receivedByDesignation } = req.body;
+    const { item, quantity, unit, items, purpose, notes, budgetSource, requestedByName, requestedByDesignation, receivedByName, receivedByDesignation } = req.body;
 
     // Check if this is a multi-item request (from cart) or single item (legacy/direct)
     if (items && items.length > 0) {
@@ -112,6 +112,7 @@ exports.createRequest = async (req, res) => {
         items,
         purpose,
         notes,
+        budgetSource,
         requestedBy: req.user.id,
         requestedByName,
         requestedByDesignation,
@@ -153,6 +154,7 @@ exports.createRequest = async (req, res) => {
         unit,
         purpose,
         notes,
+        budgetSource,
         requestedBy: req.user.id,
         requestedByName,
         requestedByDesignation,

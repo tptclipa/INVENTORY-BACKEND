@@ -14,6 +14,28 @@ const formatDate = (date) => {
   return `${month}/${day}/${year}`;
 };
 
+// Helper function to generate RIS number based on formula: Ryyyy-mmdd-nnn
+// where nnn is the sequential number of RIS generated on that day (padded to 3 digits)
+const generateRISNumber = async (date = new Date()) => {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  
+  // Format the date prefix: Ryyyy-mmdd-
+  const datePrefix = `R${year}-${month}${day}-`;
+  
+  // Count how many RIS numbers exist for this date
+  const count = await Request.countDocuments({
+    risNumber: { $regex: `^${datePrefix}` }
+  });
+  
+  // Generate the new sequential number (count + 1), padded to 3 digits
+  const sequentialNumber = String(count + 1).padStart(3, '0');
+  
+  return `${datePrefix}${sequentialNumber}`;
+};
+
 // @desc    Generate RIS (Requisition and Issue Slip) from template
 // @route   POST /api/ris/generate/:requestId
 // @access  Private (users can generate RIS for their own approved requests)
@@ -81,8 +103,17 @@ exports.generateRIS = async (req, res) => {
     // worksheet.pageSetup.orientation = 'landscape';
     // worksheet.pageSetup.paperSize = 9; // A4
 
-    // Generate RIS number
-    const risNumber = `R2025-${String(request._id).slice(-6).toUpperCase()}`;
+    // Generate or retrieve RIS number
+    let risNumber = request.risNumber;
+    
+    // If no RIS number exists, generate one and save it
+    if (!risNumber) {
+      // Use the approval date (reviewedAt) or fall back to creation date
+      const dateForRIS = request.reviewedAt || request.createdAt;
+      risNumber = await generateRISNumber(dateForRIS);
+      request.risNumber = risNumber;
+      await request.save();
+    }
     
     // Looking at the generated image, I can see the exact positions:
     // Row 3: Entity Name (A3), Fund Cluster (F3)
@@ -98,6 +129,9 @@ exports.generateRIS = async (req, res) => {
     
     // RIS Number - Cell G8
     worksheet.getCell('G8').value = risNumber;
+    
+    // Budget Source - Cell H7 (MOOE or SSP)
+    worksheet.getCell('H7').value = request.budgetSource || 'MOOE';
     
     // Item details start at row 11 (first data row after headers in row 10)
     // Based on template: Stock No. | Unit | Description | Qty (Requisition) | Stock Available (Yes/No) | Qty (Issue) | Remarks
@@ -265,8 +299,8 @@ exports.generateCustomRIS = async (req, res) => {
       });
     }
 
-    // Generate RIS number
-    const risNumber = `R2025-${String(Date.now()).slice(-6)}`;
+    // Generate RIS number using the new formula
+    const risNumber = await generateRISNumber();
     
     // Populate header information based on template structure
     worksheet.getCell('A5').value = `Entity Name ${entityName || 'TESDA Provincial Training Center - Lipa'}`;
@@ -363,13 +397,26 @@ exports.previewTemplate = async (req, res) => {
   }
 };
 
-// Helper function to fill a single RIS worksheet
-const fillRISWorksheet = async (worksheet, request) => {
-  // Generate RIS number
-  const risNumber = `R2025-${String(request._id).slice(-6).toUpperCase()}`;
+// Helper function to fill a single RIS template on a worksheet
+// rowOffset: 0 for first RIS template, 31 for second RIS template (adjust based on your template)
+const fillRISWorksheet = async (worksheet, request, rowOffset = 0) => {
+  // Generate or retrieve RIS number
+  let risNumber = request.risNumber;
   
-  // RIS Number - Cell G8
-  worksheet.getCell('G8').value = risNumber;
+  // If no RIS number exists, generate one and save it
+  if (!risNumber) {
+    // Use the approval date (reviewedAt) or fall back to creation date
+    const dateForRIS = request.reviewedAt || request.createdAt;
+    risNumber = await generateRISNumber(dateForRIS);
+    request.risNumber = risNumber;
+    await request.save();
+  }
+  
+  // RIS Number - Cell G8 (or G8 + offset)
+  worksheet.getCell(`G${8 + rowOffset}`).value = risNumber;
+  
+  // Budget Source - Cell H7 (MOOE or SSP)
+  worksheet.getCell(`H${7 + rowOffset}`).value = request.budgetSource || 'MOOE';
   
   // Check if this is a multi-item request or single item
   const itemsToProcess = request.items && request.items.length > 0 
@@ -399,9 +446,9 @@ const fillRISWorksheet = async (worksheet, request) => {
     }
   });
   
-  // Add each item starting from row 11
+  // Add each item starting from row 11 (+ offset)
   itemsWithFreshStock.forEach((reqItem, index) => {
-    const rowNum = 11 + index;
+    const rowNum = 11 + rowOffset + index;
     const itemIdStr = (reqItem.item._id || reqItem.item).toString();
     const balanceAfterIssue = balanceAfterIssueByItem[itemIdStr];
 
@@ -437,39 +484,39 @@ const fillRISWorksheet = async (worksheet, request) => {
     }
   });
   
-  // Purpose (Row 23, Column B)
-  worksheet.getCell('B23').value = request.purpose;
+  // Purpose (Row 23 + offset, Column B)
+  worksheet.getCell(`B${23 + rowOffset}`).value = request.purpose;
   
   // REQUESTED BY section
-  worksheet.getCell('C26').value = request.requestedByName || '';
-  worksheet.getCell('C27').value = request.requestedByDesignation || '';
-  worksheet.getCell('C28').value = formatDate(request.createdAt);
+  worksheet.getCell(`C${26 + rowOffset}`).value = request.requestedByName || '';
+  worksheet.getCell(`C${27 + rowOffset}`).value = request.requestedByDesignation || '';
+  worksheet.getCell(`C${28 + rowOffset}`).value = formatDate(request.createdAt);
   
   // APPROVED AND ISSUED BY (Date)
-  worksheet.getCell('D28').value = formatDate(new Date());
+  worksheet.getCell(`D${28 + rowOffset}`).value = formatDate(new Date());
   
   // RECEIVED BY section
-  worksheet.getCell('H26').value = request.receivedByName || '';
-  worksheet.getCell('H27').value = request.receivedByDesignation || '';
-  worksheet.getCell('H28').value = formatDate(request.createdAt);
+  worksheet.getCell(`H${26 + rowOffset}`).value = request.receivedByName || '';
+  worksheet.getCell(`H${27 + rowOffset}`).value = request.receivedByDesignation || '';
+  worksheet.getCell(`H${28 + rowOffset}`).value = formatDate(request.createdAt);
 };
 
-// @desc    Generate batch RIS (2 RIS in one file)
+// @desc    Generate batch RIS (multiple RIS in one file, 2 per worksheet)
 // @route   POST /api/ris/generate-batch
 // @access  Private
 exports.generateRISBatch = async (req, res) => {
   try {
     const { requestIds } = req.body;
     
-    // Validate exactly 2 requests
-    if (!requestIds || !Array.isArray(requestIds) || requestIds.length !== 2) {
+    // Validate at least 2 requests
+    if (!requestIds || !Array.isArray(requestIds) || requestIds.length < 2) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide exactly 2 request IDs for batch generation'
+        message: 'Please provide at least 2 request IDs for batch generation'
       });
     }
 
-    // Fetch both requests
+    // Fetch all requests
     const requests = await Promise.all(
       requestIds.map(id => 
         Request.findById(id)
@@ -480,15 +527,16 @@ exports.generateRISBatch = async (req, res) => {
       )
     );
 
-    // Validate both requests exist
-    if (!requests[0] || !requests[1]) {
+    // Validate all requests exist
+    const missingRequests = requests.filter(r => !r);
+    if (missingRequests.length > 0) {
       return res.status(404).json({
         success: false,
-        message: 'One or both requests not found'
+        message: 'One or more requests not found'
       });
     }
 
-    // Check authorization for both requests
+    // Check authorization for all requests
     for (const request of requests) {
       if (req.user.role !== 'admin' && request.requestedBy._id.toString() !== req.user.id) {
         return res.status(403).json({
@@ -520,34 +568,127 @@ exports.generateRISBatch = async (req, res) => {
       });
     }
 
+    // Calculate how many worksheets needed (2 RIS per worksheet)
+    const worksheetsNeeded = Math.ceil(requests.length / 2);
+    
+    // PHASE 1: Load template and create worksheets
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(templatePath);
     
-    // Get first two worksheets
-    const sheet1 = workbook.worksheets[0]; // " MOOE"
-    const sheet2 = workbook.worksheets[1]; // "SSP"
+    const firstSheet = workbook.worksheets[0];
+    const worksheets = [firstSheet];
     
-    if (!sheet1 || !sheet2) {
-      return res.status(500).json({
-        success: false,
-        message: 'Could not access worksheets in SET template'
+    // For additional worksheets, manually copy everything from first sheet
+    for (let wsIndex = 1; wsIndex < worksheetsNeeded; wsIndex++) {
+      const newSheet = workbook.addWorksheet(`RIS Set ${wsIndex + 1}`);
+      
+      // Copy worksheet properties
+      newSheet.properties = Object.assign({}, firstSheet.properties);
+      newSheet.pageSetup = Object.assign({}, firstSheet.pageSetup);
+      if (firstSheet.headerFooter) {
+        newSheet.headerFooter = Object.assign({}, firstSheet.headerFooter);
+      }
+      if (firstSheet.views) {
+        newSheet.views = JSON.parse(JSON.stringify(firstSheet.views));
+      }
+      
+      // Copy columns (width and style)
+      firstSheet.columns.forEach((col, idx) => {
+        const newCol = newSheet.getColumn(idx + 1);
+        if (col.width) newCol.width = col.width;
+        if (col.style) newCol.style = Object.assign({}, col.style);
+        if (col.hidden) newCol.hidden = col.hidden;
       });
+      
+      // Copy all rows and cells
+      firstSheet.eachRow({ includeEmpty: true }, (row, rowNum) => {
+        const newRow = newSheet.getRow(rowNum);
+        if (row.height) newRow.height = row.height;
+        if (row.hidden) newRow.hidden = row.hidden;
+        if (row.outlineLevel) newRow.outlineLevel = row.outlineLevel;
+        
+        row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+          const newCell = newRow.getCell(colNum);
+          
+          // Copy value
+          if (cell.value !== undefined && cell.value !== null) {
+            newCell.value = cell.value;
+          }
+          
+          // Copy style properties individually for better reliability
+          if (cell.numFmt) newCell.numFmt = cell.numFmt;
+          if (cell.font) newCell.font = Object.assign({}, cell.font);
+          if (cell.alignment) newCell.alignment = Object.assign({}, cell.alignment);
+          if (cell.border) {
+            newCell.border = {
+              top: cell.border.top ? Object.assign({}, cell.border.top) : undefined,
+              left: cell.border.left ? Object.assign({}, cell.border.left) : undefined,
+              bottom: cell.border.bottom ? Object.assign({}, cell.border.bottom) : undefined,
+              right: cell.border.right ? Object.assign({}, cell.border.right) : undefined,
+              diagonal: cell.border.diagonal ? Object.assign({}, cell.border.diagonal) : undefined
+            };
+          }
+          if (cell.fill) newCell.fill = Object.assign({}, cell.fill);
+          if (cell.protection) newCell.protection = Object.assign({}, cell.protection);
+        });
+        
+        newRow.commit();
+      });
+      
+      // Copy merged cells - use model.merges which is the proper way
+      if (firstSheet.model && firstSheet.model.merges) {
+        firstSheet.model.merges.forEach(merge => {
+          try {
+            // merge is in the format "A1:B2"
+            newSheet.mergeCells(merge);
+          } catch (e) {
+            console.error('Error merging cells:', merge, e.message);
+          }
+        });
+      }
+      
+      // Also try the internal _merges as backup
+      if (firstSheet._merges) {
+        Object.keys(firstSheet._merges).forEach(range => {
+          try {
+            // Check if not already merged
+            const alreadyMerged = newSheet.model && newSheet.model.merges && 
+                                  newSheet.model.merges.includes(range);
+            if (!alreadyMerged) {
+              newSheet.mergeCells(range);
+            }
+          } catch (e) {
+            // Ignore duplicate merge errors
+          }
+        });
+      }
+      
+      worksheets.push(newSheet);
     }
-
-    // Fill both sheets with request data
-    await fillRISWorksheet(sheet1, requests[0]);
-    await fillRISWorksheet(sheet2, requests[1]);
-
-    // Optional: Remove Sheet3 if it exists
-    if (workbook.worksheets[2] && workbook.worksheets[2].name === 'Sheet3') {
-      workbook.removeWorksheet(workbook.worksheets[2].id);
+    
+    // PHASE 2: Fill all worksheets with request data
+    for (let wsIndex = 0; wsIndex < worksheetsNeeded; wsIndex++) {
+      const worksheet = worksheets[wsIndex];
+      
+      // Fill first RIS in this worksheet (top form)
+      const firstRequestIndex = wsIndex * 2;
+      if (requests[firstRequestIndex]) {
+        await fillRISWorksheet(worksheet, requests[firstRequestIndex], 0);
+      }
+      
+      // Fill second RIS in this worksheet (bottom form) if it exists
+      const secondRequestIndex = wsIndex * 2 + 1;
+      if (requests[secondRequestIndex]) {
+        await fillRISWorksheet(worksheet, requests[secondRequestIndex], 29);
+      }
     }
 
     // Generate buffer and send
     const buffer = await workbook.xlsx.writeBuffer();
     
+    const filename = `RIS-Batch-${requests.length}requests-${Date.now()}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=RIS-Batch-${Date.now()}.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     res.send(buffer);
     
   } catch (error) {

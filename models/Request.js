@@ -85,6 +85,12 @@ const requestSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  budgetSource: {
+    type: String,
+    enum: ['MOOE', 'SSP'],
+    default: 'MOOE',
+    trim: true
+  },
   reviewedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -95,6 +101,12 @@ const requestSchema = new mongoose.Schema({
   rejectionReason: {
     type: String,
     trim: true
+  },
+  risNumber: {
+    type: String,
+    trim: true,
+    unique: true,
+    sparse: true // Allows multiple null values but unique non-null values
   },
   createdAt: {
     type: Date,

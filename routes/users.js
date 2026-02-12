@@ -131,7 +131,44 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
   }
 });
 
-// @desc    Change user password
+// @desc    Change own password (for logged-in users)
+// @route   PUT /api/users/me/password
+// @access  Private
+router.put('/me/password', protect, async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.password = password;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// @desc    Change user password (Admin only)
 // @route   PUT /api/users/:id/password
 // @access  Private (Admin only)
 router.put('/:id/password', protect, authorize('admin'), async (req, res) => {

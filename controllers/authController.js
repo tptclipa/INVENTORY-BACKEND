@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const ActivityLog = require('../models/ActivityLog');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT Token
@@ -36,6 +37,21 @@ exports.register = async (req, res) => {
 
     // Create token
     const token = generateToken(user._id);
+
+    // Log registration activity
+    try {
+      await ActivityLog.createLog({
+        user: user._id,
+        action: 'login',
+        resourceType: 'system',
+        details: `New user ${user.username} registered and logged in`,
+        ipAddress: req.ip || req.connection?.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+      console.log(`Registration activity log created for user: ${user.username}`);
+    } catch (logError) {
+      console.error('Failed to create registration activity log:', logError);
+    }
 
     res.status(201).json({
       success: true,
@@ -94,6 +110,21 @@ exports.login = async (req, res) => {
     // Create token
     const token = generateToken(user._id);
 
+    // Log login activity (await to catch errors)
+    try {
+      await ActivityLog.createLog({
+        user: user._id,
+        action: 'login',
+        resourceType: 'system',
+        details: `User ${user.username} logged in`,
+        ipAddress: req.ip || req.connection?.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+      console.log(`Activity log created for user: ${user.username}`);
+    } catch (logError) {
+      console.error('Failed to create activity log:', logError);
+    }
+
     res.status(200).json({
       success: true,
       data: {
@@ -151,6 +182,21 @@ exports.adminLogin = async (req, res) => {
     // Create token
     const token = generateToken(adminUser._id);
 
+    // Log admin login activity (await to catch errors)
+    try {
+      await ActivityLog.createLog({
+        user: adminUser._id,
+        action: 'login',
+        resourceType: 'system',
+        details: `Admin ${adminUser.username} logged in`,
+        ipAddress: req.ip || req.connection?.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+      console.log(`Activity log created for admin: ${adminUser.username}`);
+    } catch (logError) {
+      console.error('Failed to create admin activity log:', logError);
+    }
+
     res.status(200).json({
       success: true,
       token,
@@ -180,6 +226,38 @@ exports.getMe = async (req, res) => {
     res.status(200).json({
       success: true,
       data: user
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Logout user
+// @route   POST /api/auth/logout
+// @access  Private
+exports.logout = async (req, res) => {
+  try {
+    // Log logout activity (await to catch errors)
+    try {
+      await ActivityLog.createLog({
+        user: req.user.id,
+        action: 'logout',
+        resourceType: 'system',
+        details: `User ${req.user.username} logged out`,
+        ipAddress: req.ip || req.connection?.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+      console.log(`Logout activity log created for user: ${req.user.username}`);
+    } catch (logError) {
+      console.error('Failed to create logout activity log:', logError);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
     });
   } catch (error) {
     res.status(400).json({

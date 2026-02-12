@@ -13,6 +13,7 @@ connectDB();
 
 // Route files
 const auth = require('./routes/auth');
+const users = require('./routes/users');
 const categories = require('./routes/categories');
 const items = require('./routes/items');
 const transactions = require('./routes/transactions');
@@ -20,11 +21,16 @@ const requests = require('./routes/requests');
 const documents = require('./routes/documents');
 const excel = require('./routes/excel');
 const ris = require('./routes/ris');
+const activityLogs = require('./routes/activityLogs');
 
 const app = express();
 
 // Body parser
 app.use(express.json());
+
+// Activity logger middleware
+const { logActivity } = require('./middleware/activityLogger');
+app.use(logActivity());
 
 // Enable CORS
 const corsOptions = {
@@ -37,6 +43,7 @@ app.use(cors(corsOptions));
 
 // Mount routers
 app.use('/api/auth', auth);
+app.use('/api/users', users);
 app.use('/api/categories', categories);
 app.use('/api/items', items);
 app.use('/api/transactions', transactions);
@@ -44,6 +51,7 @@ app.use('/api/requests', requests);
 app.use('/api/documents', documents);
 app.use('/api/excel', excel);
 app.use('/api/ris', ris);
+app.use('/api/activity-logs', activityLogs);
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -60,13 +68,15 @@ app.get('/api', (req, res) => {
     message: 'API is running',
     endpoints: [
       '/api/auth',
+      '/api/users',
       '/api/categories',
       '/api/items',
       '/api/transactions',
       '/api/requests',
       '/api/documents',
       '/api/excel',
-      '/api/ris'
+      '/api/ris',
+      '/api/activity-logs'
     ]
   });
 });

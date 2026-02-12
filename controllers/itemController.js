@@ -91,6 +91,18 @@ exports.createItem = async (req, res) => {
 
     const item = await Item.create(req.body);
 
+    // Create initial transaction record if item has initial quantity
+    if (item.quantity > 0) {
+      await Transaction.create({
+        item: item._id,
+        type: 'in',
+        quantity: item.quantity,
+        balanceAfter: item.quantity,
+        notes: 'Initial stock - Item created',
+        performedBy: req.user.id
+      });
+    }
+
     res.status(201).json({
       success: true,
       data: item
@@ -108,6 +120,20 @@ exports.createItem = async (req, res) => {
 // @access  Private
 exports.updateItem = async (req, res) => {
   try {
+    // Get the original item first to compare quantity changes
+    const originalItem = await Item.findById(req.params.id);
+
+    if (!originalItem) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found'
+      });
+    }
+
+    const oldQuantity = originalItem.quantity;
+    const newQuantity = req.body.quantity;
+
+    // Update the item
     const item = await Item.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -115,13 +141,27 @@ exports.updateItem = async (req, res) => {
         new: true,
         runValidators: true
       }
-    );
+    ).populate('category', 'name');
 
-    if (!item) {
-      return res.status(404).json({
-        success: false,
-        message: 'Item not found'
-      });
+    // Create transaction record if quantity changed
+    if (newQuantity !== undefined && oldQuantity !== newQuantity) {
+      const quantityDiff = newQuantity - oldQuantity;
+      
+      if (quantityDiff !== 0) {
+        const transactionType = quantityDiff > 0 ? 'in' : 'out';
+        const transactionQuantity = Math.abs(quantityDiff);
+        
+        await Transaction.create({
+          item: req.params.id,
+          type: transactionType,
+          quantity: transactionQuantity,
+          balanceAfter: newQuantity,
+          notes: transactionType === 'in' 
+            ? `Restocking - Item quantity updated from ${oldQuantity} to ${newQuantity}`
+            : `Stock adjustment - Item quantity updated from ${oldQuantity} to ${newQuantity}`,
+          performedBy: req.user.id
+        });
+      }
     }
 
     res.status(200).json({

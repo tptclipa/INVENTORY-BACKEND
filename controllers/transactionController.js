@@ -9,6 +9,11 @@ exports.getTransactions = async (req, res) => {
     const { itemId, type, startDate, endDate } = req.query;
     let query = {};
 
+    // If user is not admin, only show their own transactions
+    if (req.user.role !== 'admin') {
+      query.performedBy = req.user.id;
+    }
+
     // Filter by item
     if (itemId) {
       query.item = itemId;
@@ -53,7 +58,14 @@ exports.getTransactions = async (req, res) => {
 // @access  Private
 exports.getItemTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find({ item: req.params.itemId })
+    let query = { item: req.params.itemId };
+
+    // If user is not admin, only show their own transactions
+    if (req.user.role !== 'admin') {
+      query.performedBy = req.user.id;
+    }
+
+    const transactions = await Transaction.find(query)
       .populate('performedBy', 'username')
       .sort('-createdAt');
 

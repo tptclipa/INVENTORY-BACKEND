@@ -29,4 +29,179 @@ router.get('/', protect, authorize('admin'), async (req, res) => {
   }
 });
 
+// @desc    Create new user
+// @route   POST /api/users
+// @access  Private (Admin only)
+router.post('/', protect, authorize('admin'), async (req, res) => {
+  try {
+    const { name, username, email, password, role } = req.body;
+
+    // Check if user already exists
+    const userExists = await User.findOne({ $or: [{ email }, { username }] });
+    if (userExists) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this username or email already exists'
+      });
+    }
+
+    // Create user
+    const user = await User.create({
+      name,
+      username,
+      email,
+      password,
+      role: role || 'user'
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        _id: user._id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// @desc    Update user
+// @route   PUT /api/users/:id
+// @access  Private (Admin only)
+router.put('/:id', protect, authorize('admin'), async (req, res) => {
+  try {
+    const { name, username, email, password, role } = req.body;
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if username or email is taken by another user
+    if (username !== user.username || email !== user.email) {
+      const existingUser = await User.findOne({
+        _id: { $ne: req.params.id },
+        $or: [{ email }, { username }]
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Username or email already taken by another user'
+        });
+      }
+    }
+
+    // Update fields
+    user.name = name || user.name;
+    user.username = username || user.username;
+    user.email = email || user.email;
+    user.role = role || user.role;
+    
+    // Password should only be changed via dedicated endpoint
+    // Don't update password in general user update
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        _id: user._id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// @desc    Change user password
+// @route   PUT /api/users/:id/password
+// @access  Private (Admin only)
+router.put('/:id/password', protect, authorize('admin'), async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.password = password;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// @desc    Delete user
+// @route   DELETE /api/users/:id
+// @access  Private (Admin only)
+router.delete('/:id', protect, authorize('admin'), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Prevent deleting yourself
+    if (user._id.toString() === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot delete your own account'
+      });
+    }
+
+    await user.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;

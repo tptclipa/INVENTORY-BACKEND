@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const ActivityLog = require('../models/ActivityLog');
 const { protect, authorize } = require('../middleware/auth');
+const { generateVerificationCode, sendPasswordChangeVerificationEmail } = require('../services/emailService');
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -131,21 +133,12 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
   }
 });
 
-// @desc    Change own password (for logged-in users)
-// @route   PUT /api/users/me/password
+// @desc    Send verification code to email for password change (logged-in user)
+// @route   POST /api/users/me/password/send-code
 // @access  Private
-router.put('/me/password', protect, async (req, res) => {
+router.post('/me/password/send-code', protect, async (req, res) => {
   try {
-    const { password } = req.body;
-
-    if (!password || password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters'
-      });
-    }
-
-    const user = await User.findById(req.user.id).select('+password');
+    const user = await User.findById(req.user.id).select('email name +passwordResetCode +passwordResetExpiry');
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -153,8 +146,89 @@ router.put('/me/password', protect, async (req, res) => {
       });
     }
 
-    user.password = password;
+    const code = generateVerificationCode();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    user.passwordResetCode = code;
+    user.passwordResetExpiry = expiry;
     await user.save();
+
+    try {
+      await sendPasswordChangeVerificationEmail(user.email, user.name, code);
+    } catch (emailError) {
+      console.error('Failed to send password change verification email:', emailError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send verification email'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification code sent to your email'
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// @desc    Change own password (for logged-in users) — requires email verification code
+// @route   PUT /api/users/me/password
+// @access  Private
+router.put('/me/password', protect, async (req, res) => {
+  try {
+    const { code, password } = req.body;
+
+    if (!code || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide verification code and new password'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    const user = await User.findById(req.user.id)
+      .select('+password +passwordResetCode +passwordResetExpiry');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.passwordResetCode !== code || !user.passwordResetExpiry || user.passwordResetExpiry < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired verification code'
+      });
+    }
+
+    user.password = password;
+    user.passwordResetCode = undefined;
+    user.passwordResetExpiry = undefined;
+    await user.save();
+
+    try {
+      await ActivityLog.createLog({
+        user: user._id,
+        action: 'other',
+        resourceType: 'user',
+        details: `${user.name} changed their password`,
+        ipAddress: req.ip || req.connection?.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+    } catch (logError) {
+      console.error('Failed to create password change activity log:', logError);
+    }
 
     res.status(200).json({
       success: true,

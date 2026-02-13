@@ -248,8 +248,70 @@ const sendPasswordResetEmail = async (email, name, code) => {
   }
 };
 
+// Send password change verification code (for logged-in user changing password)
+const sendPasswordChangeVerificationEmail = async (email, name, code) => {
+  try {
+    const transporter = getMailTransporter();
+
+    const mailOptions = {
+      from: `"TESDA Inventory System" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Password Change Verification - TESDA Inventory System',
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+              .container { background: #ffffff; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 40px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .logo { font-size: 24px; font-weight: bold; color: #dc2626; margin-bottom: 10px; }
+              .code-box { background: #fef2f2; border: 2px dashed #dc2626; border-radius: 8px; padding: 20px; text-align: center; margin: 30px 0; }
+              .code { font-size: 32px; font-weight: bold; color: #dc2626; letter-spacing: 8px; margin: 10px 0; }
+              .footer { text-align: center; margin-top: 30px; font-size: 14px; color: #6b7280; }
+              .warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin: 20px 0; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <div class="logo">🔒 TESDA Inventory System</div>
+                <h2>Password Change Verification</h2>
+              </div>
+              <p>Hello ${name},</p>
+              <p>You requested to change your password. Use the code below to confirm:</p>
+              <div class="code-box">
+                <div>Your Verification Code</div>
+                <div class="code">${code}</div>
+                <div style="font-size: 14px; color: #6b7280; margin-top: 10px;">Valid for 15 minutes</div>
+              </div>
+              <p>Enter this code in the Change Password form to set your new password.</p>
+              <div class="warning">
+                <strong>⚠️ Security:</strong> If you didn't request this, please secure your account and ignore this email. Do not share this code.
+              </div>
+              <div class="footer">
+                <p>This is an automated message from TESDA Inventory Management System.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Password change verification email sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Email service error:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   generateVerificationCode,
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendPasswordChangeVerificationEmail,
 };

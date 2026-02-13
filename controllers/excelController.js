@@ -370,13 +370,12 @@ exports.exportTransactionReport = async (req, res) => {
     // Fetch transactions
     const transactions = await Transaction.find(query)
       .populate('item', 'name sku')
-      .populate('user', 'username')
+      .populate('performedBy', 'username')
       .sort('-createdAt');
     
-    // Calculate statistics
-    const stockIns = transactions.filter(t => t.type === 'stock-in');
-    const stockOuts = transactions.filter(t => t.type === 'stock-out');
-    const adjustments = transactions.filter(t => t.type === 'adjustment');
+    // Calculate statistics (Transaction model uses 'in', 'out', 'rejected')
+    const stockIns = transactions.filter(t => t.type === 'in');
+    const stockOuts = transactions.filter(t => t.type === 'out');
     
     const totalStockIn = stockIns.reduce((sum, t) => sum + t.quantity, 0);
     const totalStockOut = stockOuts.reduce((sum, t) => sum + t.quantity, 0);
@@ -425,10 +424,6 @@ exports.exportTransactionReport = async (req, res) => {
     worksheet.getCell('D4').value = `Stock Out: ${totalStockOut} units`;
     worksheet.getCell('D4').font = { bold: true, color: { argb: 'FFDC3545' } };
     
-    worksheet.mergeCells('F3:G3');
-    worksheet.getCell('F3').value = `Adjustments: ${adjustments.length}`;
-    worksheet.getCell('F3').font = { bold: true };
-    
     // Add empty row
     worksheet.addRow([]);
     
@@ -446,8 +441,8 @@ exports.exportTransactionReport = async (req, res) => {
     
     // Add data rows
     transactions.forEach(transaction => {
-      const isStockIn = transaction.type === 'stock-in';
-      const isStockOut = transaction.type === 'stock-out';
+      const isStockIn = transaction.type === 'in';
+      const isStockOut = transaction.type === 'out';
       
       const row = worksheet.addRow([
         formatDateTime(transaction.createdAt),
@@ -455,8 +450,8 @@ exports.exportTransactionReport = async (req, res) => {
         transaction.item?.sku || 'N/A',
         transaction.type.toUpperCase().replace('-', ' '),
         transaction.quantity,
-        transaction.reason || '',
-        transaction.user?.username || 'System'
+        transaction.notes || '',
+        transaction.performedBy?.username || 'System'
       ]);
       
       // Type cell color
@@ -502,13 +497,11 @@ exports.exportTransactionReport = async (req, res) => {
       { state: 'frozen', xSplit: 0, ySplit: 6 }
     ];
     
-    // Set response headers
+    // Set response headers and send buffer (avoids stream/end issues)
+    const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=transaction-report-${Date.now()}.xlsx`);
-    
-    // Write to response
-    await workbook.xlsx.write(res);
-    res.end();
+    res.send(buffer);
     
   } catch (error) {
     console.error('Error exporting transaction report:', error);

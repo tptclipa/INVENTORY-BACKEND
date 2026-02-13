@@ -35,7 +35,7 @@ exports.getItems = async (req, res) => {
       const sortBy = sort.split(',').join(' ');
       items = items.sort(sortBy);
     } else {
-      items = items.sort('-createdAt');
+      items = items.sort('sku');
     }
 
     const results = await items;

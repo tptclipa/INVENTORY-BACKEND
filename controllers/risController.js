@@ -62,15 +62,11 @@ exports.generateRIS = async (req, res) => {
       });
     }
 
-    // Check if request has at least one approved item
-    const hasApprovedItems = request.items && request.items.length > 0 
-      ? request.items.some(item => item.status === 'approved')
-      : request.status === 'approved';
-
-    if (!hasApprovedItems) {
+    // Allow RIS for any reviewed request (approved or rejected); only block pending
+    if (request.status === 'pending') {
       return res.status(400).json({
         success: false,
-        message: 'Can only generate RIS for requests with at least one approved item'
+        message: 'Can only generate RIS for reviewed requests (approved or rejected)'
       });
     }
 
@@ -545,15 +541,11 @@ exports.generateRISBatch = async (req, res) => {
         });
       }
 
-      // Check if request has at least one approved item
-      const hasApprovedItems = request.items && request.items.length > 0 
-        ? request.items.some(item => item.status === 'approved')
-        : request.status === 'approved';
-
-      if (!hasApprovedItems) {
+      // Allow batch RIS for any reviewed request (approved or rejected)
+      if (request.status === 'pending') {
         return res.status(400).json({
           success: false,
-          message: `Request ${request._id} does not have approved items`
+          message: `Request ${request._id} has not been reviewed yet`
         });
       }
     }

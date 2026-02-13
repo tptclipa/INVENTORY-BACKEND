@@ -8,7 +8,7 @@ const transactionSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['in', 'out'],
+    enum: ['in', 'out', 'rejected'],
     required: [true, 'Please specify transaction type']
   },
   quantity: {

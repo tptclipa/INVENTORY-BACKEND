@@ -249,7 +249,8 @@ exports.updateRequest = async (req, res) => {
 // @access  Private/Admin
 exports.approveRequest = async (req, res) => {
   try {
-    const request = await Request.findById(req.params.id);
+    const request = await Request.findById(req.params.id)
+      .populate('requestedBy', 'name username');
 
     if (!request) {
       return res.status(404).json({
@@ -278,6 +279,7 @@ exports.approveRequest = async (req, res) => {
     item.quantity -= request.quantity;
     await item.save();
 
+    const requesterName = request.requestedByName?.trim() || request.requestedBy?.name || request.requestedBy?.username || 'Unknown';
     // Create transaction record (balanceAfter = stock after this issue; links to request for RIS history)
     await Transaction.create({
       item: request.item,
@@ -285,7 +287,7 @@ exports.approveRequest = async (req, res) => {
       quantity: request.quantity,
       balanceAfter: item.quantity,
       request: request._id,
-      notes: `Request approved - ${request.purpose}`,
+      notes: `Request approved - ${requesterName}`,
       performedBy: req.user.id
     });
 
@@ -326,7 +328,8 @@ exports.rejectRequest = async (req, res) => {
       });
     }
 
-    const request = await Request.findById(req.params.id);
+    const request = await Request.findById(req.params.id)
+      .populate('requestedBy', 'name username');
 
     if (!request) {
       return res.status(404).json({
@@ -347,6 +350,16 @@ exports.rejectRequest = async (req, res) => {
     request.reviewedAt = Date.now();
     request.rejectionReason = rejectionReason;
     await request.save();
+
+    const requesterName = request.requestedByName?.trim() || request.requestedBy?.name || request.requestedBy?.username || 'Unknown';
+    await Transaction.create({
+      item: request.item,
+      type: 'rejected',
+      quantity: request.quantity,
+      request: request._id,
+      notes: `Request rejected - ${requesterName}`,
+      performedBy: req.user.id
+    });
 
     const updatedRequest = await Request.findById(request._id)
       .populate('item', 'name sku quantity')
@@ -370,7 +383,8 @@ exports.rejectRequest = async (req, res) => {
 // @access  Private/Admin
 exports.approveRequestItem = async (req, res) => {
   try {
-    const request = await Request.findById(req.params.id);
+    const request = await Request.findById(req.params.id)
+      .populate('requestedBy', 'name username');
 
     if (!request) {
       return res.status(404).json({
@@ -421,6 +435,7 @@ exports.approveRequestItem = async (req, res) => {
     item.quantity -= requestItem.quantity;
     await item.save();
 
+    const requesterName = request.requestedByName?.trim() || request.requestedBy?.name || request.requestedBy?.username || 'Unknown';
     // Create transaction record (balanceAfter = stock after this issue; links to request for RIS history)
     await Transaction.create({
       item: requestItem.item,
@@ -428,7 +443,7 @@ exports.approveRequestItem = async (req, res) => {
       quantity: requestItem.quantity,
       balanceAfter: item.quantity,
       request: request._id,
-      notes: `Request approved - ${request.purpose}`,
+      notes: `Request approved - ${requesterName}`,
       performedBy: req.user.id
     });
 
@@ -469,7 +484,8 @@ exports.approveRequestItem = async (req, res) => {
 exports.rejectRequestItem = async (req, res) => {
   try {
     const { rejectionReason } = req.body;
-    const request = await Request.findById(req.params.id);
+    const request = await Request.findById(req.params.id)
+      .populate('requestedBy', 'name username');
 
     if (!request) {
       return res.status(404).json({
@@ -498,10 +514,22 @@ exports.rejectRequestItem = async (req, res) => {
       });
     }
 
+    const requestItem = request.items[itemIndex];
+
     // Update item status
     request.items[itemIndex].status = 'rejected';
     request.items[itemIndex].rejectionReason = rejectionReason || 'No reason provided';
     await request.save();
+
+    const requesterName = request.requestedByName?.trim() || request.requestedBy?.name || request.requestedBy?.username || 'Unknown';
+    await Transaction.create({
+      item: requestItem.item,
+      type: 'rejected',
+      quantity: requestItem.quantity,
+      request: request._id,
+      notes: `Request rejected - ${requesterName}`,
+      performedBy: req.user.id
+    });
 
     // Check if all items have been reviewed
     const allReviewed = request.items.every(item => item.status !== 'pending');

@@ -89,6 +89,14 @@ exports.createTransaction = async (req, res) => {
   try {
     const { item, type, quantity, notes } = req.body;
 
+    // Rejected transactions are only created when a request is rejected (via request controller)
+    if (type === 'rejected') {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejected transactions cannot be created manually'
+      });
+    }
+
     // Check if item exists
     const itemExists = await Item.findById(item);
 

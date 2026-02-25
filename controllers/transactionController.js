@@ -6,7 +6,7 @@ const Item = require('../models/Item');
 // @access  Private
 exports.getTransactions = async (req, res) => {
   try {
-    const { itemId, type, startDate, endDate } = req.query;
+    const { itemId, type, startDate, endDate, page = 1, limit = 10 } = req.query;
     let query = {};
 
     // If user is not admin, only show their own transactions
@@ -35,14 +35,29 @@ exports.getTransactions = async (req, res) => {
       }
     }
 
-    const transactions = await Transaction.find(query)
-      .populate('item', 'name sku')
-      .populate('performedBy', 'username')
-      .sort('-createdAt');
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [total, transactions] = await Promise.all([
+      Transaction.countDocuments(query),
+      Transaction.find(query)
+        .populate('item', 'name sku')
+        .populate('performedBy', 'username')
+        .sort('-createdAt')
+        .skip(skip)
+        .limit(limitNum)
+    ]);
+
+    const totalPages = Math.ceil(total / limitNum);
 
     res.status(200).json({
       success: true,
       count: transactions.length,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages,
       data: transactions
     });
   } catch (error) {
